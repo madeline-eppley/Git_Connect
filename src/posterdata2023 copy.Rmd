@@ -1,0 +1,45 @@
+---
+title: "Poster Envr Data"
+author: "Madeline Eppley"
+date: "3/15/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("sdmpredictors")
+install.packages("leaflet")
+install.packages("raster")
+```
+
+```{r}
+library(sdmpredictors)
+library(leaflet)
+library(raster)
+```
+
+```{r}
+list_layers()
+
+oyster.envr <- load_layers(layercodes = c("BO_salinity", "BO_sstmean", "BO_sstmax"))
+
+salinity <- load_layers("BO_salinity")
+sstmean <- load_layers("BO_sstmean")
+sstmax <- load_layers("BO_sstmax")
+```
+
+```{r}
+metadata <- SeascapeSamples_Phenotype_Lat_Version_3_15_23
+```
+
+```{r}
+sites <- cbind("lat" = metadata$`Site Latitude`, "lon" = metadata$`Site Longitude`)
+head(sites)
+
+envr_sites <- data.frame(Name = sites, extract(oyster.envr, sites))
+head(envr_sites)
+```
+
