@@ -1,0 +1,384 @@
+---
+title: "Poster Envr Data"
+author: "Madeline Eppley"
+date: "3/15/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+install.packages("sdmpredictors")
+install.packages("leaflet")
+install.packages("raster")
+
+install.packages("rgeos", repos="http://R-Forge.R-project.org", type="source")
+install.packages("rgdal", repos="http://R-Forge.R-project.org", type="source")
+library(devtools)
+install_github("r-spatial/sf", configure.args = "--with-proj-lib=/usr/local/lib/")
+
+install.packages("sf")
+install.packages("maps")
+install.packages("rasterVis")
+
+```
+
+```{r}
+library(data.table)
+library(sdmpredictors)
+library(leaflet)
+library(ggplot2)
+library(rgdal)
+library(raster)
+library(LEA)
+library(sf)
+library(maps)
+library(sp)
+library(rasterVis)
+library(scales)
+
+```
+
+```{r}
+list_layers()
+
+oyster.envr <- load_layers(layercodes = c("BO_salinity", "BO_sstmean", "BO_sstmax"))
+
+salinity <- load_layers("BO_salinity")
+sstmean <- load_layers("BO_sstmean")
+sstmax <- load_layers("BO_sstmax")
+
+layer_stats("BO_sstmax")
+```
+
+```{r}
+library(readr)
+metadata<- read_csv("SeascapeSamples - Phenotype-Lat Version 3.20.23.csv")
+View(metadata)
+```
+
+```{r}
+sites <- cbind("lat" = metadata$lat, "lon" = metadata$lon)
+head(sites)
+
+envr_sites <- data.frame(Name = sites, extract(oyster.envr, sites))
+head(envr_sites)
+```
+
+```{r}
+envr_sites_matrix<-as.matrix(envr_sites[,-c(1,2)])
+
+envr_sites_matrix_nas<-na.omit(envr_sites_matrix)
+
+write.env(envr_sites_matrix_nas, "sites_environ_matrix.env")
+```
+
+```{r}
+lon.range <- range(envr_sites$Name.lon)
+lat.range <- range(envr_sites$Name.lat)
+
+print(lon.range)
+print(lat.range)
+
+range.extent <- extent(-100, -60, 24, 49)
+```
+
+```{r}
+sst_max.crop<-crop(sstmax, range.extent)
+
+my.colors = colorRampPalette(c("#5E85B8","#EDF0C0","#C13127"))
+
+plot(sst_max.crop,col=my.colors(1000), axes=FALSE, box=FALSE)
+title(cex.sub = 1.25, sub ="Maximum temperature at the sea surface (ºC)")
+plot(ras, add = TRUE)
+
+
+
+plot(ras)
+
+
+
+points(ras)
+
+
+df_sf <- st_as_sf(envr_sites, coords = c("Name.lon", "Name.lat"), crs = 4326)
+ggplot() +
+  geom_sf(data = df_sf) +
+  coord_sf(xlim = c(-100, -60), ylim = c(25, 45))
+
+
+crs(sst_max.crop)
+
+sites_ras <- (metadata)
+summary(envr_sites)
+
+
+
+df <- data.frame(longitude = c(-89.49761, -79.061842, -94.90361111, -97.174, -80.92203, -81.02173, -90.01914, -96.2233, -75.88222, -97.359167, -81.2957724, -81.363169, -91.70716, -90.911362, -79.8976693, -93.3179, -70.911544, -71.453, -71.437883, -88.31833, -81.43638, -70.83657, -74.913017, -75.516944, -65.910547, -65.9007577, -93.91806, -76.562783, -76.63554, -75.54978, -62.8874544, -76.97669, -69.53203214, -69.91531434), latitude = c(29.64379, 33.5235297, 29.5475, 28.096, 32.01721, 31.98995, 29.42362, 28.6936, 37.87694, 26.559722, 31.4177723, 31.453512, 29.4196, 29.239925, 32.7523094, 29.84499, 43.053746, 41.505, 41.55897, 30.37278, 30.44003, 42.751733, 39.073592, 39.434722, 43.812486, 43.82746, 29.785, 37.063817, 37.14888, 35.79389, 46.1459253, 38.33696, 44.02452236, 43.83136167), site = c("LKF", "OYL", "GLB", "CPB", "FPL", "SKR", "CUB", "TPL", "CUS", "LGM", "SAP", "MER", "NRF", "SLK", "GCV", "CAL", "GBN", "NWR", "DKV", "CPR", "KPF", "SWI", "CSH", "HPC", "SLB", "EEL", "SLT", "WRS", "DWS", "NPS", "PEI", "LCP", "DYC", "ORC"))
+df.exp <- st_as_sf(df, coords = c("longitude", "latitude"), crs = 4326)
+
+
+
+st_crs(df.exp) <- 4326
+
+# Check the CRS of the sf object
+st_crs(df.exp)
+
+
+xmin <- -100
+xmax <- -60
+ymin <- 25
+ymax <- 45
+
+ras <- raster(xmn=xmin, xmx=xmax, ymn=ymin, ymx=ymax, res=0.01, crs=CRS("+proj=longlat +datum=WGS84"))
+
+extent(ras)
+
+ras <- rasterize(df, ras)
+
+writeRaster(ras, "envr_sst_max_raster.tif", format="GTiff", overwrite=TRUE)
+
+
+ggplot() +
+  geom_raster(data = ras[[1]], aes(x = x, y = y, fill = values)) +
+  scale_fill_gradientn(colours = my.colors, na.value = "transparent") +
+  coord_equal() +
+  labs(x = "Longitude", y = "Latitude") +
+  theme_bw()
+
+# Add the df.exp object to the plot using the rasterVis package
+levelplot(ras, margin = FALSE, at = seq(min(r), max(r), length.out = 11)) +
+  layer(sp.points(df.exp, pch = 20, col = "red", cex = 0.5)) 
+
+
+
+
+
+# load the latitude and longitude coordinates
+
+my_coords <- df
+  
+# data.frame(longitude = c(-97.359167, -95.383056), latitude = c(28.016944, 29.758333))
+
+# create a SpatialPointsDataFrame from the coordinates
+my_coords_sp <- SpatialPointsDataFrame(coords=my_coords[,c("longitude","latitude")],
+                                        data=my_coords,proj4string=CRS("+proj=longlat +datum=WGS84"))
+
+# plot the raster brick with the latitude and longitude points
+plot(sst_max.crop,col=my.colors(1000), axes=FALSE, box=FALSE)
+title(cex.sub = 1.25, sub ="Maximum temperature at the sea surface (ºC)")
+plot(my_coords_sp, add=TRUE, pch=20, col="navy")
+text(my_coords_sp$longitude, my_coords_sp$latitude, labels = my_coords_sp$site, pos = 3, cex = 0.75)
+
+
+# Convert the RasterBrick object to a data frame
+r_df <- as.data.frame(sst_max.crop, xy=TRUE)
+coord_df <- as.data.frame(my_coords_sp)
+
+r_df.nas <- na.omit(r_df)
+
+
+# Plot the sst_max.crop data
+ggplot() +
+  geom_raster(data = r_df, aes(x = x, y = y)) +
+  scale_fill_gradientn(colours = my.colors(1000)) +
+  labs(title = "Maximum temperature at the sea surface (ºC)", fill = "")
+
+
+
+theme_map <- function(...) {
+  theme_minimal() +
+  theme(
+    text = element_text(family = "Ubuntu Regular", color = "#22211d"),
+    axis.line = element_blank(),
+    axis.text.x = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks = element_blank(),
+    axis.title.x = element_blank(),
+    axis.title.y = element_blank(),
+    # panel.grid.minor = element_line(color = "#ebebe5", size = 0.2),
+    panel.grid.major = element_line(color = "#ebebe5", size = 0.2),
+    panel.grid.minor = element_blank(),
+    plot.background = element_rect(fill = "#f5f5f2", color = NA), 
+    panel.background = element_rect(fill = "#f5f5f2", color = NA), 
+    legend.background = element_rect(fill = "#f5f5f2", color = NA),
+    panel.border = element_blank(),
+    ...
+  )
+}
+
+
+# Add the my_coords_sp data to the plot, use the df with NA's removed
+ggplot() +
+  geom_raster(data = r_df.nas, aes(x = x, y = y, fill = BO_sstmax)) +
+  scale_fill_gradientn(colours = my.colors(1000)) +
+  geom_point(data = coord_df, aes(x = longitude, y = latitude), color = "navy", size = 3) +
+  geom_text(data = coord_df, aes(x = longitude, y = latitude), label = coord_df$site, size = 3, hjust = 0, vjust = 0) +
+  coord_equal() + 
+  theme_classic() +
+  theme(axis.line = element_blank(),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.border = element_blank(),
+    panel.background = element_blank()) + 
+  labs(x = NULL, 
+         y = NULL, 
+         title = "Seascape Genomics Sampling Sites",
+         subtitle = "Eastern Oyster C. virginica", 
+         caption = "Marine Environmental Data: Bio-ORACLE, 2014") + 
+  theme(plot.title = element_text(hjust = 0.5), plot.subtitle = element_text(hjust = 0.5), plot.caption = element_text(hjust = 1)) + 
+  theme(legend.position = c(0.1, 0.8))
+
+#theme(legend.title = element_text("Sea Surface Temperature (ºC)"))
+
+
+
+
+
+
+coordinates(df.exp) <- c("latitude", "longitude")
+proj4string(df.exp) <- CRS("+proj=longlat +datum=WGS84")
+
+
+
+
+
+# ggrepel to move site labels - change number of iterations of algorithm
+# Inkscape to move labels
+
+```
+
+```{r}
+sns.color_palette("mako")
+```
+
+
+
+```{r}
+# This [plots the spatial locations of sampling sites
+
+ggplot() +  
+  #geom_polygon(data = sst_max.crop, aes(x=long, y=lat, group=group))
+  geom_point(data=envr_sites, aes(x=Name.lon, y=Name.lat), color="red")
+
+```
+
+```{r}
+#Shell length by latitude
+plot(metadata$Shell_length_cm ~ metadata$lat)
+```
+```{r}
+plot(metadata$Shell_width_cm ~ metadata$lat)
+```
+
+```{r}
+plot(metadata$Pea_crab ~ metadata$lat)
+```
+
+```{r}
+plot(metadata$Ripe_Gonad ~ metadata$lat)
+```
+
+```{r}
+plot(metadata$Boring_sponge ~ metadata$lat)
+```
+```{r}
+plot(metadata$Ripe_Gonad ~ metadata$Shell_length_cm)
+```
+
+```{r}
+#Pea crab and shell length relationship
+plot(metadata$Pea_crab ~ metadata$Shell_length_cm)
+```
+
+
+
+```{r}
+#y-axis male = 1, female = 0
+metadata.nas<- metadata[!is.na(metadata$Sex),]
+plot(metadata.nas$Sex ~ metadata.nas$lat)
+```
+
+
+```{r}
+plot(metadata$Shell_length_cm ~ metadata$Month)
+
+```
+
+```{r}
+plot(metadata$Sex ~ metadata$Shell_length_cm)
+```
+
+```{r}
+boxplot(Shell_length_cm~Sex,data=metadata, main="Sex by Length",
+   xlab="Sex, M=1 F=0", ylab="Length in cm")
+```
+
+
+```{r}
+boxplot(Shell_length_cm ~ Pea_crab*Boring_sponge, data=metadata, notch=TRUE,
+  col=(c("gold","darkgreen")),
+  main="Length of Oyster as an indicator of health with parasites", xlab="Pea Crab and Boring Sponge Prevalence")
+
+range(metadata$Shell_length_cm)
+
+plot(metadata$Shell_length_cm ~ metadata$lat)
+
+
+ggplot(metadata, aes(x = lat, y = Shell_length_cm, fill = site)) +
+  geom_area(position = "fill", colour = "black", alpha = .4) +
+  scale_y_continuous(waiver()) +
+  scale_x_continuous(waiver())
+```
+
+```{r}
+#Summary of all metadata
+summary(metadata)
+
+#Check for normality
+
+#Normal distribution
+hist(metadata$Shell_length_cm)
+shapiro.test(metadata$Shell_length_cm)
+
+log.shell <- log10(metadata$Shell_length_cm)
+hist(log.shell)
+shapiro.test(log.shell)
+
+#Bimodal
+hist(metadata$lat)
+shapiro.test(metadata$lat)
+
+log.lat <- log10(metadata$lat)
+hist(log.lat)
+shapiro.test(log.lat)
+
+```
+
+```{r}
+metadata.m <- as.matrix(metadata, rownames.force = NA)
+
+metadata.df <- data.frame(metadata)
+
+lm.lengthbyheight = lm(metadata.df$Shell_length_cm ~ metadata.df$lat)
+
+plot(Shell_length_cm ~ lat, data=metadata)                     
+summary(lm.lengthbyheight)
+
+par(mfrow=c(2,2))
+plot(lm.lengthbyheight)
+
+
+# With log transformed data
+lm.log.lengthbyheight = lm(log.shell ~ log.lat)
+summary(lm.log.lengthbyheight)
+par(mfrow=c(2,2))
+
+
+plot(lm.log.lengthbyheight)
+
+
+```
+
